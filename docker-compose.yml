@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  transcriber:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Puoi cambiare il modello qui se vuoi ricreare l'immagine con un modello diverso
+        # Modelli disponibili: tiny, base, small, medium, large
+        # Per l'italiano, 'small' è un buon compromesso tra velocità e accuratezza su CPU.
+        WHISPER_MODEL_ARG: small
+    image: trascrizione-app # Diamo un nome all'immagine buildata
+    container_name: transcriber_service
+    volumes:
+      # Volume per i file audio di input
+      - ./audio_input:/app/audio_input:rw
+      # Volume per i file di trascrizione di output
+      - ./transcriptions_output:/app/transcriptions_output:rw
+      # Volume per i dati persistenti (checkpoint, WAV convertiti, segmenti)
+      # Assicurati che Docker abbia i permessi per scrivere in questa directory sull'host
+      - ./persistent_data:/app/persistent_data:rw
+      # Cache per i modelli Whisper, per evitare di riscaricarli se il container viene ricreato
+      # senza che l'immagine sia cambiata.
+      - whisper_cache:/root/.cache/whisper 
+    environment:
+      # Modello da usare per la trascrizione (può essere sovrascritto al runtime)
+      - WHISPER_MODEL=small # tiny, base, small, medium, large
+      # Lingua dell'audio (es. 'it' per italiano). Se non specificato, Whisper la rileva.
+      - AUDIO_LANGUAGE=it
+      # Durata massima di una sessione di trascrizione in secondi (es. 10 ore = 36000)
+      # Mezza giornata = 12 ore = 12 * 3600 = 43200 secondi
+      - MAX_SESSION_DURATION_SECONDS=43200 
+      # Durata di ogni segmento audio in millisecondi (es. 10 minuti = 600000)
+      - CHUNK_DURATION_MS=600000 # 10 minuti
+    # Per eseguire: docker-compose run --rm transcriber /app/audio_input/nomefile.mp3 /app/transcriptions_output/nomefile.txt
+    # Il --rm pulisce il container dopo l'esecuzione.
+    # Non definiamo un 'command' qui perché lo passeremo con 'docker-compose run'
+
+volumes:
+  whisper_cache: # Definisce il volume nominato per la cache di Whisper
+
+
+
+**Test e Considerazioni Finali:**
+
+1.  **Permessi su Linux**: Se usi Linux, potresti dover gestire i permessi per i volumi Docker, specialmente `persistent_data`. L'utente dentro il container (root di default) deve poter scrivere nelle directory mappate. `chmod 777` è una soluzione rapida ma non ideale per produzione. Un'alternativa è specificare `user: "${UID}:${GID}"` nel `docker-compose.yml` per il servizio `transcriber`.
+2.  **Download del Modello Whisper**: Il modello `small` (o quello scelto) verrà scaricato la prima volta che `whisper.load_model()` viene chiamato e messo in cache in `~/.cache/whisper` dentro il container. Grazie al volume nominato `whisper_cache`, questo download avverrà una sola volta anche se ricrei i container (purché il volume persista). La riga `RUN python -c "import whisper; whisper.load_model('${WHISPER_MODEL}')"` nel Dockerfile tenta di scaricarlo durante la build.
+3.  **Performance**: Con un i3, la trascrizione di 1 ora e 20 minuti (4800 secondi) con il modello `small` potrebbe richiedere diverse ore. Se il rapporto tempo reale / tempo di trascrizione fosse 1:3 (cioè 3 secondi per trascrivere 1 secondo di audio), ci vorrebbero `4800 * 3 = 14400` secondi, ovvero 4 ore. Se fosse 1:5, sarebbero circa 6.6 ore. Questo rientra nel limite di mezza giornata per file, ma la funzionalità di checkpointing è essenziale.
+4.  **Pulizia `persistent_data`**: Lo script attuale rimuove solo il file `progress.json` al completamento. I chunk audio/testo e il WAV convertito rimangono in `persistent_data/nome_file/`. Questo è utile per il debug. Se vuoi una pulizia più aggressiva, puoi decommentare e adattare le linee di `os.remove` e `os.rmdir` nella sezione di pulizia dello script `transcribe.py`.
