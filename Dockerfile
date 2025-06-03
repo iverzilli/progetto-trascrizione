@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Usiamo 'small' come default, configurabile via variabile d'ambiente.
 ARG WHISPER_MODEL_ARG=small
 ENV WHISPER_MODEL=${WHISPER_MODEL_ARG}
-RUN python -c "import whisper; print(f'Downloading Whisper model: {whisper.मामले.get_model_path(\"${WHISPER_MODEL}\")}')"
+RUN python -c "import whisper; whisper.load_model(\"${WHISPER_MODEL}\")"
 
 # Copia il resto dell'applicazione nella directory di lavoro
 COPY transcribe_app/ /app/transcribe_app/

@@ -1,5 +1,6 @@
 # Ignore all mp3 files in audio_input directory
 audio_input/*.mp3
+persistent_data/*
 
 # Keep the directories but ignore their contents (specifically the 'empty' files)
 audio_input/empty

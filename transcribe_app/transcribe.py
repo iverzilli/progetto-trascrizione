@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import subprocess
+import whisper
 from datetime import datetime, timedelta
 from pydub import AudioSegment
 from pydub.utils import make_chunks

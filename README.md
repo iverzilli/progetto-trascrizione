@@ -37,7 +37,7 @@ progetto-trascrizione/
     # Esegui questo comando nella directory principale del progetto
     # (potrebbe richiedere sudo a seconda della configurazione di Docker)
     mkdir -p persistent_data
-    chmod -R 777 persistent_data 
+   chmod -R 777 persistent_data  
     ```
     Questo dà permessi completi. Per ambienti di produzione, considera una gestione dei permessi più restrittiva.
 
@@ -120,3 +120,9 @@ Questa architettura a container con volumi condivisi è una buona base per un fu
     *   Servire le trascrizioni finali da `transcriptions_output/`.
 3.  Un frontend (React, Vue, HTML semplice) comunicherebbe con queste API.
 ```
+**Test e Considerazioni Finali:**
+
+1.  **Permessi su Linux**: Se usi Linux, potresti dover gestire i permessi per i volumi Docker, specialmente `persistent_data`. L'utente dentro il container (root di default) deve poter scrivere nelle directory mappate. `chmod 777` è una soluzione rapida ma non ideale per produzione. Un'alternativa è specificare `user: "${UID}:${GID}"` nel `docker-compose.yml` per il servizio `transcriber`.
+2.  **Download del Modello Whisper**: Il modello `small` (o quello scelto) verrà scaricato la prima volta che `whisper.load_model()` viene chiamato e messo in cache in `~/.cache/whisper` dentro il container. Grazie al volume nominato `whisper_cache`, questo download avverrà una sola volta anche se ricrei i container (purché il volume persista). La riga `RUN python -c "import whisper; whisper.load_model('${WHISPER_MODEL}')"` nel Dockerfile tenta di scaricarlo durante la build.
+3.  **Performance**: Con un i3, la trascrizione di 1 ora e 20 minuti (4800 secondi) con il modello `small` potrebbe richiedere diverse ore. Se il rapporto tempo reale / tempo di trascrizione fosse 1:3 (cioè 3 secondi per trascrivere 1 secondo di audio), ci vorrebbero `4800 * 3 = 14400` secondi, ovvero 4 ore. Se fosse 1:5, sarebbero circa 6.6 ore. Questo rientra nel limite di mezza giornata per file, ma la funzionalità di checkpointing è essenziale.
+4.  **Pulizia `persistent_data`**: Lo script attuale rimuove solo il file `progress.json` al completamento. I chunk audio/testo e il WAV convertito rimangono in `persistent_data/nome_file/`. Questo è utile per il debug. Se vuoi una pulizia più aggressiva, puoi decommentare e adattare le linee di `os.remove` e `os.rmdir` nella sezione di pulizia dello script `transcribe.py`.
